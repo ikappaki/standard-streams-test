@@ -517,13 +517,15 @@ $
 ```
 child inherits the redirected-to-file _stderr_ (_+_) as expected:
 ```
->:to-child-stderr :write-nl 1 > test.txt 2>&1
-:to-child-stderr :write-nl 1 > test.txt 2>&1
+>stest :to-child-stderr :write-nl 1 > test.txt 2>&1
+stest :to-child-stderr :write-nl 1 > test.txt 2>&1
 >type test.txt
 type test.txt
-[CMD+:46324] :to-stderr :write-nl 1 
-[RPT+:46324] :writing-bytes 2
-[RPT+:46324] :wrote-bytes 2
-[RPT+:46324] :exiting...
+[CMD+:63896] :to-child-stderr :write-nl 1 
+[CMD+:40500] :to-stderr :write-nl 1 
+[RPT+:40500] :writing-bytes 2
+[RPT+:40500] :wrote-bytes 2
+[RPT+:40500] :exiting...
 $
+[RPT+:63896] :child-exited-pid 40500
 ```
