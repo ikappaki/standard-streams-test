@@ -36,4 +36,5 @@ commands:
 
   :sock-to-child-stderr :read RCOUNT :write|:write-nl WCOUNT [:unbuf|(:lnbuf|:flbuf BSIZE)]
         Create a pair of read and write sockets. Then create a child process with its stderr redirected to the write socket. The parent process will attempt to read RCOUNT characters from the read socket. The child process will attempt to write to its stderr (see :to-stderr for information on the write and buffering mode options).
+
 ```

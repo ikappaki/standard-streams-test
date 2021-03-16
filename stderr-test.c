@@ -75,9 +75,10 @@ static char const * usage[] =
    output (to stdout) between parent and child by using a named mutex
    whose ID (i.e. name) is passed over to the child. */
 static DWORD _PID=-1;static char _CM=' ';static HANDLE _OUTMX=NULL;static char* _MX_ID=NULL;
+static char const * _RL="PARNT";
 #define RPT(FS, ...) {DWORD wr=WaitForSingleObject(_OUTMX, INFINITE);                \
                       assert(wr==WAIT_OBJECT_0);                                     \
-		      printf("[RPT%c:%5ld] " FS,_CM,_PID __VA_OPT__(,) __VA_ARGS__); \
+		      printf("[RPT%c:%s] " FS,_CM,_RL  __VA_OPT__(,) __VA_ARGS__); \
 		      fflush(stdout);					             \
 		      DWORD ro=ReleaseMutex(_OUTMX); assert(ro);}
 #define _RPT_D(...) if (_DEBUG_DO) RPT(__VA_ARGS__)
@@ -161,7 +162,7 @@ int main(int argc, char const * argv[])
 	int wrote = fwrite(msg, sizeof(char), msg_len, stderr);
 	RPT(":wrote-bytes %d\n", wrote);
 
-	RPT(":exiting...\n%s", "");
+	RPT(":exiting...\n");
 
 	return 0;
       }
@@ -178,7 +179,7 @@ int main(int argc, char const * argv[])
 	HANDLE child = child_SPAWN(cmdargs, NULL);
 
 	WaitForSingleObject( child, INFINITE );
-	RPT(":child-exited-pid %ld\n", GetProcessId(child));
+	RPT(":child-exited\n");
 
 	return 0;
       }
@@ -232,7 +233,7 @@ int main(int argc, char const * argv[])
 	ASSERT( retval != 0 );
 	RPT(":wrote-bytes %ld\n", wrote);
 
-	RPT(":exiting...\n%s", "");
+	RPT(":exiting...\n");
 
 	return 0;
       }
@@ -412,7 +413,7 @@ void pipe_handle_to_child(int pipe_size, int write_count, int read_count)
 	read, read_buffer); fflush(stdout);
  
   WaitForSingleObject(child, INFINITE);
-  RPT(":child-exited-pid %ld\n", GetProcessId(child));
+  RPT(":child-exited\n");
 
   _close(pfds[READ]);
     
@@ -458,7 +459,7 @@ void pipe_to_child_stderr(int pipe_size, int read_count, char const * cmdargs)
   
   // wait for child to exit
   WaitForSingleObject(child, INFINITE );
-  RPT(":child-exited-pid %ld\n", GetProcessId(child));
+  RPT(":child-exited\n");
 
   _close(pfds[READ]);
 }
@@ -590,7 +591,7 @@ void socket_to_child_stderr(int read_count, char const * cmdargs)
   HANDLE child = child_SPAWN(cmdargs, write_handle); ASSERT(child);
 
   WaitForSingleObject(child, INFINITE );
-  RPT(":child-exited-pid %ld\n", GetProcessId(child));
+  RPT(":child-exited\n");
   
   WaitForSingleObject(thread, INFINITE );
   _RPT_D(":thread-exited\n");         
@@ -835,6 +836,14 @@ int strings_JOIN(int aistart, int total, char const * prefix,
     }
 }
 
+DWORD _EXIT(LPVOID _exit_ms)
+{
+  DWORD* exit_ms = (DWORD*)_exit_ms;
+  Sleep(*exit_ms);
+  RPT(":killing-after-inactivity-secs %ld\n", *exit_ms/1000);
+  exit(99);
+}
+
 void log_SETUP(int argc, char const* argv[])
 /* Setup global logging variables and print out the ARGC number of
    command line arguments found in ARGV that were used to start this
@@ -851,6 +860,10 @@ void log_SETUP(int argc, char const* argv[])
    '?' => unknown
 */
 {
+  // time before the program exits forcefully. Has to be static since
+  // it is used an arg to the thread
+  static DWORD exit_ms=2000;
+
   _PID = GetProcessId(GetCurrentProcess());
   {
     HANDLE sh=(HANDLE)_get_osfhandle(_fileno(stderr)); assert(sh);
@@ -878,6 +891,8 @@ void log_SETUP(int argc, char const* argv[])
   if (si.cbReserved2>prefix_len
       && !strncmp(prefix, (char*)si.lpReserved2+sizeof(DWORD), strlen(prefix)))
     {
+      _RL="CHILD";      
+      exit_ms=1000;
       _MX_ID = calloc(si.cbReserved2, sizeof(char));
       strncpy(_MX_ID, (char*)si.lpReserved2+sizeof(DWORD), si.cbReserved2);
       _OUTMX = OpenMutex(MUTEX_ALL_ACCESS, FALSE, _MX_ID); assert(_OUTMX);
@@ -894,10 +909,16 @@ void log_SETUP(int argc, char const* argv[])
   
   {
     DWORD wr=WaitForSingleObject(_OUTMX, INFINITE); assert(wr==WAIT_OBJECT_0);
-    printf("[CMD%c:%5ld] ",_CM,_PID);
+    printf("[CMD%c:%s] ",_CM,_RL);
     for(int i=1;i<argc;i++){printf("%s ",argv[i]);} printf("\n");
     fflush(stdout);
     DWORD ro=ReleaseMutex(_OUTMX); assert(ro);
   }
 
+  {
+    DWORD threadID;
+    HANDLE thread = CreateThread(NULL, 0, _EXIT, &exit_ms, 0,&threadID);
+    ASSERT(thread != NULL);
+  }
+  
 }
